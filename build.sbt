@@ -25,6 +25,14 @@ lazy val commonSettings = Seq(
 def configFile(project: String): java.io.File =
   file(project) / "src" / "main" / "resources" / "application.conf"
 
+lazy val bench = (project in file("bench")).
+  settings(commonSettings: _*).
+  enablePlugins(JmhPlugin).
+  dependsOn(
+    isuda,
+    isutar
+  )
+
 lazy val isucon = (project in file(".")).
   settings(commonSettings: _*)
 
