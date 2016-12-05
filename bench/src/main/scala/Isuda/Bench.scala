@@ -10,6 +10,7 @@ class Bench {
 
   @Benchmark
   def htmlify(): Unit = {
+    Web.setup()
     Web.htmlify("test string")
   }
 }
