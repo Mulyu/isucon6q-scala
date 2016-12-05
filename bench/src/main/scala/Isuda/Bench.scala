@@ -1,10 +1,12 @@
+package Isuda
+
 import isuda.Web
 import org.openjdk.jmh.annotations.Benchmark
 
 /**
   * Created by mulyu on 2016/12/04.
   */
-class IsudaBench {
+class Bench {
 
   @Benchmark
   def htmlify(): Unit = {
