@@ -3,7 +3,9 @@ package isuda
 import com.typesafe.config.ConfigFactory
 import java.security.{MessageDigest, SecureRandom}
 import java.util.regex.Pattern
+
 import org.joda.time.LocalDateTime
+
 import scala.util.{Random, Try}
 import scala.util.control.Exception.catching
 import scalikejdbc.{DB, WrappedResultSet}
@@ -13,12 +15,15 @@ import skinny.micro.{ActionResult, BadRequest, Forbidden, NotFound, Ok, WebApp}
 import skinny.micro.contrib.json4s.JSONSupport
 import skinny.http
 
+import scala.util.matching.Regex
+
 object Web extends WebApp
     with Static
     with Session.Cookie
     with Template
     with JSONSupport {
   import Util.{sha1Hex, StringConversion}
+  import Model.WrappedSetConvert
 
   final val PerPage = 10
 
@@ -30,6 +35,8 @@ object Web extends WebApp
     val origin = appConfig.getString("origin.isutar")
     val url = s"$origin/initialize"
     http.HTTP.get(url)
+
+    EntryRegex.initialize()
 
     Ok(toJSONString(Map("result" -> "ok")))
   }
@@ -43,7 +50,7 @@ object Web extends WebApp
         ORDER BY updated_at DESC
         LIMIT $PerPage
         OFFSET $offset
-      """.map(asEntry).list.apply()
+      """.map(_.toEntry).list.apply()
     }
 
     val Some(totalEntries) = DB.readOnly { implicit session =>
@@ -92,6 +99,8 @@ object Web extends WebApp
       }
       redirect(uriFor("/"))
     }
+    EntryRegex.initialize()
+
     result.merge
   })
 
@@ -141,7 +150,7 @@ object Web extends WebApp
         sql"""
           SELECT * FROM user
           WHERE name = $name
-        """.map(asUser).single.apply()
+        """.map(_.toUser).single.apply()
       }.filter(user => user.password == sha1Hex(user.salt + pass))
 
     val maybeUser = for {
@@ -167,7 +176,7 @@ object Web extends WebApp
         sql"""
           SELECT * FROM entry
           WHERE keyword = $keyword
-        """.map(asEntry).single.apply()
+        """.map(_.toEntry).single.apply()
       }.toRight(NotFound()).right
     } yield render("keyword",
       "user" -> maybeUserName,
@@ -195,6 +204,9 @@ object Web extends WebApp
       }
       redirect(uriFor("/"))
     }
+
+    EntryRegex.initialize()
+
     result.merge
   })
 
@@ -224,13 +236,7 @@ object Web extends WebApp
     }
 
   def htmlify(content: String): String = {
-    val entries = DB.readOnly { implicit session =>
-      sql"""
-        SELECT * FROM entry
-      """.map(asEntry).list.apply()
-    }
-    val regex =
-      entries.map(e => Pattern.quote(e.keyword)).mkString("(", "|", ")").r
+    val regex = EntryRegex.regex
     val hashBuilder = Map.newBuilder[String, String]
     val escaped = regex.replaceAllIn(content, m => {
       val kw = m.group(1)
@@ -275,23 +281,6 @@ object Web extends WebApp
       )
   }
 
-  def asEntry(rs: WrappedResultSet): Model.Entry = Model.Entry(
-    rs.get[Long]("id"),
-    rs.get[Long]("author_id"),
-    rs.get[String]("keyword"),
-    rs.get[String]("description"),
-    rs.get[LocalDateTime]("updated_at"),
-    rs.get[LocalDateTime]("created_at")
-  )
-
-  def asUser(rs: WrappedResultSet): Model.User = Model.User(
-    rs.get[Long]("id"),
-    rs.get[String]("name"),
-    rs.get[String]("password"),
-    rs.get[String]("salt"),
-    rs.get[LocalDateTime]("created_at")
-  )
-
   override val sessionKey: String = "isuda_session"
   val sessionSecretKey: String = "tonymoris"
 
@@ -316,6 +305,28 @@ object Model {
     updatedAt: LocalDateTime,
     createdAt: LocalDateTime
   )
+
+  implicit class WrappedSetConvert(rs: WrappedResultSet) {
+
+    def toEntry: Entry =
+      Entry(
+        rs.get[Long]("id"),
+        rs.get[Long]("author_id"),
+        rs.get[String]("keyword"),
+        rs.get[String]("description"),
+        rs.get[LocalDateTime]("updated_at"),
+        rs.get[LocalDateTime]("created_at")
+      )
+
+    def toUser: User =
+      User(
+        rs.get[Long]("id"),
+        rs.get[String]("name"),
+        rs.get[String]("password"),
+        rs.get[String]("salt"),
+        rs.get[LocalDateTime]("created_at")
+      )
+  }
 
   case class User(
     id: Long,
@@ -370,3 +381,22 @@ object Util {
     ).foldLeft(str) { (s, subst) => s.replaceAllLiterally(subst._1, subst._2) }
   }
 }
+
+object EntryRegex {
+  import Model.WrappedSetConvert
+
+  private var value: String = ""
+
+  def initialize(): Unit = {
+    val entries = DB.readOnly { implicit session =>
+      sql"""
+        SELECT * FROM entry
+      """.map(_.toEntry).list.apply()
+    }
+    value =
+      entries.map(e => Pattern.quote(e.keyword)).mkString("(", "|", ")")
+  }
+
+  def regex: Regex = value.r
+}
+
