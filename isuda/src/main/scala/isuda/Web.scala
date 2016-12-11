@@ -227,7 +227,6 @@ object Web extends WebApp
     val entries = DB.readOnly { implicit session =>
       sql"""
         SELECT * FROM entry
-        ORDER BY CHARACTER_LENGTH(keyword) DESC
       """.map(asEntry).list.apply()
     }
     val regex =
