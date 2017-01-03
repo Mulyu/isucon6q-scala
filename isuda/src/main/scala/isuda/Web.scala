@@ -238,7 +238,7 @@ object Web extends WebApp
   def htmlify(content: String): String = {
     val regex = EntryRegex.regex
     val hashBuilder = Map.newBuilder[String, String]
-    regex.replaceAllIn(content, m => {
+    regex.replaceAllIn(content.htmlEscaped, m => {
       val kw = m.group(1)
       val url = s"/keyword/${kw.uriEncoded}"
       val link = s"""<a href="$url">${kw.htmlEscaped}</a>"""
