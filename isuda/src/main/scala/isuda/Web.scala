@@ -243,7 +243,7 @@ object Web extends WebApp
       val url = s"/keyword/${kw.uriEncoded}"
       val link = s"""<a href="$url">${kw.htmlEscaped}</a>"""
       link
-    }).htmlEscaped.replaceAllLiterally("\n", "<br />\n")
+    }).replaceAllLiterally("\n", "<br />\n")
   }
 
   def loadStars(keyword: String): Seq[Model.Star] = {
